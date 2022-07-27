@@ -1,5 +1,7 @@
 # Simple Dynamic Window Manager for Windows
 
+https://user-images.githubusercontent.com/6392321/181370770-37652321-7905-40e5-bfd5-a033f7f5c04e.mp4
+
 When I am working on a computer 99% of my interaction is using one of the following window configurations:
 - A single fullscreen window (e.g. when I am coding, browsing the web, etc.)
 - Two equal windows side-by-side (e.g. when debugging or when coding while reading documentation)
