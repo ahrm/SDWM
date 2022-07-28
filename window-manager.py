@@ -12,13 +12,14 @@ import win32con
 import win32gui
 
 NAME = 'SDWM'
+# if set, we create an image for alt-tab preview, at the cost of some annoyances
+PREVIEW = True
 
 def restore_state(state, foreground_window):
 	prev = None
 	for i, (hwnd, placement) in enumerate(reversed(state)):
 		name = win32gui.GetWindowText(hwnd)
 		try:
-			win32gui.SetWindowPlacement(hwnd, placement)
 			rect = placement[-1]
 			win32gui.SetWindowPlacement(hwnd, placement)
 			if i < len(state) - 1:
@@ -68,17 +69,21 @@ if __name__ == '__main__':
 	screenshot = PIL.ImageGrab.grab()
 	last_focus_time = datetime.datetime.now()
 
+	app = PyQt5.QtWidgets.QApplication([])
+	window = PyQt5.QtWidgets.QWidget()
+
 	def on_focus(first, second):
 		if active:
 			if first == None:
 				restore_state(state, foreground_window)
 				last_focus_time = datetime.datetime.now()
+				if not PREVIEW:
+					window.showMinimized()
 
-	app = PyQt5.QtWidgets.QApplication([])
-	window = PyQt5.QtWidgets.QWidget()
 	layout = PyQt5.QtWidgets.QVBoxLayout()
-	pic = PyQt5.QtWidgets.QLabel()
-	pic.setPixmap(PyQt5.QtGui.QPixmap.fromImage(ImageQt(screenshot).copy()))
+	if PREVIEW:
+		pic = PyQt5.QtWidgets.QLabel()
+		pic.setPixmap(PyQt5.QtGui.QPixmap.fromImage(ImageQt(screenshot).copy()))
 	name = PyQt5.QtWidgets.QLineEdit()
 
 	# set window icon
@@ -94,25 +99,33 @@ if __name__ == '__main__':
 			window.setWindowTitle(NAME)
 		window.showMinimized()
 
-	def on_timout():
-		global active
-		if active:
-			if (datetime.datetime.now() - last_focus_time).seconds > 1:
-				window.showMinimized()
+	if PREVIEW:
+		def on_timout():
+			global active
+			if active:
+				if (datetime.datetime.now() - last_focus_time).seconds > 1:
+					# win32gui.SetWindowPos(hwnd, win32con.HWND_TOP, rect[0], rect[1], rect[2] - rect[0], rect[3] - rect[1], win32con.SWP_SHOWWINDOW)
+					window.showMinimized()
+					for i in range(10):
+						window.lower()
 
-	# if we minimize it in focusEvent, then the window is not properly rendered
-	# so we try to minimize it periodically here
-	# (if we don't minimize the window at all, then the user might accidentally activate
-	# the window by minimizing other windows)
-	timer = PyQt5.QtCore.QTimer()
-	timer.timeout.connect(on_timout)
-	timer.start(1000)
+		# if we minimize it in focusEvent, then the window is not properly rendered
+		# so we try to minimize it periodically here
+		# (if we don't minimize the window at all, then the user might accidentally activate
+		# the window by minimizing other windows)
+		timer = PyQt5.QtCore.QTimer()
+		timer.timeout.connect(on_timout)
+		timer.start(1000)
 
 	name.returnPressed.connect(on_return_pressed)
 	layout.addWidget(name)
-	layout.addWidget(pic)
+	if PREVIEW:
+		layout.addWidget(pic)
 	window.setLayout(layout)
 	window.setFocusPolicy(PyQt5.QtCore.Qt.StrongFocus)
-	window.showMaximized()
+	if PREVIEW:
+		window.showMaximized()
+	else:
+		window.show()
 	app.focusChanged.connect(on_focus)
 	app.exec()
