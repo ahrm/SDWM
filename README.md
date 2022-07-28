@@ -20,3 +20,10 @@ run pythonw C:\path\to\window-manager.py
 return
 ```
 * There is a textbox when you run `window-manager.py` where you can optionally enter a name for the dummy window. I use this name along with [switcheroo](https://github.com/kvakulo/Switcheroo) to quickly switch to a workspace by typing its name.
+
+## Advanced Usage
+
+* If the name of the window configurations starts with `++`, we save the window configuration in a file so that it can be restored later. Since in this case, we need to launch the programs if they are not present, you need to specify which of the windows are included in this configuration (you select the checkbox next to desired windows). You can also optionally specify a command which is used to open a program. For example, if you want to open a file explorer in a specific directory, you can add something like this in the textbox next to the explorer window: `explorer \path\to\directory`.
+* If the name of the window starts with `+`, we search the previous window configurations and if a configuration with the same name (minus the plus of course) exists, we try to recreate this configuration, but we don't launch any new windows.
+* If the name of the window starts with `*` we behave similar to when it starts with `+`, but now we do launch new windows if they are not present. 
+* So overall the workflow is something like this: you first create a new configuration with a name like this `++my-awesome-config` and select the windows that are present in this configuration (also optionally specify the commands which are used to launch these windows) and then later (event after a computer restart) invoke these configurations by entering `*my-awesome-config` as the name of configuration.
