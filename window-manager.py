@@ -201,6 +201,9 @@ class WindowState(QWidget):
             self.pic_widget.setPixmap(PyQt5.QtGui.QPixmap.fromImage(ImageQt(self.screenshot).copy()))
         self.name_widget = PyQt5.QtWidgets.QLineEdit()
         self.name_widget.returnPressed.connect(self.on_return_pressed)
+        config_names = list(load_config().keys())
+        completer = PyQt5.QtWidgets.QCompleter(['*' + name for name in config_names] + ['+' + name for name in config_names])
+        self.name_widget.setCompleter(completer)
         layout.addWidget(self.name_widget)
         if PREVIEW:
             layout.addWidget(self.pic_widget)
