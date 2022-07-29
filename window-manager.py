@@ -7,6 +7,7 @@ from PIL.ImageQt import ImageQt
 import PIL.ImageGrab
 import PyQt5
 import PyQt5.QtWidgets
+from PyQt5.QtWidgets import QWidget
 import PyQt5.QtGui
 import win32con
 import win32gui
@@ -22,6 +23,8 @@ NAME = 'SDWM'
 # if set, we create an image for alt-tab preview, at the cost of some annoyances
 PREVIEW = False
 CONFIG_FILE_LOCATION = os.path.dirname(os.path.abspath(__file__)) + r"\config.json"
+ICON_PATH = os.path.dirname(os.path.abspath(__file__)) + r'\SDWM-icon.png'
+CONFIG_FILE_VERSION = 1
 
 def get_app_path(hwnd):
     """Get applicatin path given hwnd."""
@@ -39,11 +42,13 @@ def create_saved_config(selected_hwnds_with_commands, state, foreground_window):
     selected_file_locations = {hwnd: get_app_path(hwnd) for hwnd, _ in selected_hwnds_with_commands}
     state_dict = {hwnd: place for hwnd, place in state}
     result = dict()
+    result['state'] = dict()
 
     for hwnd, command in selected_hwnds_with_commands:
-        result[selected_file_locations[hwnd]] = (state_dict[hwnd], command)
+        result['state'][selected_file_locations[hwnd]] = (state_dict[hwnd], command)
 
     result['foreground_window'] = selected_file_locations[foreground_window]
+    result['version'] = CONFIG_FILE_VERSION
     return result
 
 def load_config():
@@ -118,7 +123,6 @@ def ensure_process_exists(path, command, timeout=10):
 
 def select_windows():
     windows = get_visible_window_order()
-    # show a checkbox list of windows using Qt
 
     dialog = PyQt5.QtWidgets.QDialog()
     dialog.setWindowTitle('Select Windows')
@@ -177,124 +181,134 @@ def get_file_to_hwnd_map(priority_hwnds=[]):
         res[get_app_path(hwnd)] = hwnd
     return res
 
-def ultra_minimize(window):
-    visible_windows = get_visible_window_order()
-    hwnd = int(window.winId())
-    win32gui.SetWindowPos(hwnd, win32con.HWND_BOTTOM, 0, 0, 0, 0, win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE)
-    # window.setWindowState(PyQt5.QtCore.Qt.WindowMinimized)
+def minimize(window):
+    # visible_windows = get_visible_window_order()
+    # hwnd = int(window.winId())
+    # win32gui.SetWindowPos(hwnd, win32con.HWND_BOTTOM, 0, 0, 0, 0, win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_NOACTIVATE)
+    # # window.setWindowState(PyQt5.QtCore.Qt.WindowMinimized)
     window.showMinimized()
+class WindowState(QWidget):
 
+    def __init__(self):
+        super().__init__()
 
-if __name__ == '__main__':
-    icon_path = os.path.dirname(os.path.abspath(__file__)) + r'\SDWM-icon.png'
+        self.is_active = False
+        self.update_screenshot()
 
-    active = False
-    windows = get_visible_window_order()
-    window_placements = list(map(get_window_placement, windows))
-    foreground_window = win32gui.GetForegroundWindow()
-    state = list(zip(windows, window_placements))
-    screenshot = PIL.ImageGrab.grab()
-    last_focus_time = datetime.datetime.now()
+        layout = PyQt5.QtWidgets.QVBoxLayout()
+        if PREVIEW:
+            self.pic_widget = PyQt5.QtWidgets.QLabel()
+            self.pic_widget.setPixmap(PyQt5.QtGui.QPixmap.fromImage(ImageQt(self.screenshot).copy()))
+        self.name_widget = PyQt5.QtWidgets.QLineEdit()
+        self.name_widget.returnPressed.connect(self.on_return_pressed)
+        layout.addWidget(self.name_widget)
+        if PREVIEW:
+            layout.addWidget(self.pic_widget)
 
-    app = PyQt5.QtWidgets.QApplication([])
-    window = PyQt5.QtWidgets.QWidget()
-    this_hwnd = int(window.winId())
+        self.setLayout(layout)
+        self.setFocusPolicy(PyQt5.QtCore.Qt.StrongFocus)
 
-    def restore_config(config_, should_launch_programs=False, priority_hwnds=[]):
+    def update_screenshot(self):
+        self.screenshot = PIL.ImageGrab.grab()
+    
+    def set_state(self, new_state, new_foreground_window):
+        if new_state != None:
+            self.state = new_state
+        if new_foreground_window != None:
+            self.foreground_window = new_foreground_window
+    
+    def get_snapshot(self):
+        windows = get_visible_window_order()
+        window_placements = list(map(get_window_placement, windows))
+        foreground_window = win32gui.GetForegroundWindow()
+        state = list(zip(windows, window_placements))
+        self.set_state(state, foreground_window)
+    
+    def hwnd(self):
+        return int(self.winId())
+    
+    def restore_config(self, config_, should_launch_programs=False, priority_hwnds=[]):
         config = copy.copy(config_)
 
-        global state
-        global foreground_window
         file_to_hwnd = get_file_to_hwnd_map(priority_hwnds)
-        foreground_process = None
+        foreground_process = file_to_hwnd.get(config['foreground_window'], None)
         new_state = []
         missing_programs = set()
 
-        if config['foreground_window'] not in file_to_hwnd.keys():
-            # missing_programs.add((config['foreground_window'], ""))
-            pass
-        else:
-            foreground_process = file_to_hwnd[config['foreground_window']]
-
-        del config['foreground_window']
-
-        for process_path in config.keys():
-            process_state, command = config[process_path]
-
+        for process_path, (process_state, command) in config['state'].items():
             if (process_path in file_to_hwnd.keys()) and ((not should_launch_programs) or (len(command) == 0)):
                 new_state.append((file_to_hwnd[process_path], process_state))
             else:
                 missing_programs.add((process_path, command))
         
         if len(missing_programs) == 0 or should_launch_programs == False:
-            foreground_window = foreground_process
-            state = new_state
+            self.set_state(new_state, foreground_process)
         else:
             if should_launch_programs:
                 prev_hwnds = set(get_visible_window_order())
                 for program, command in missing_programs:
                     ensure_process_exists(program, command)
                 new_hwnds = set(get_visible_window_order())
-                return restore_config(config_, should_launch_programs=False, priority_hwnds=list(new_hwnds - prev_hwnds))
+                return self.restore_config(config_, should_launch_programs=False, priority_hwnds=list(new_hwnds - prev_hwnds))
             else:
                 return False
 
         return True
+    
+    def restore(self):
+        restore_state(self.state, self.foreground_window)
 
-    def on_focus(first, second):
-        if active:
-            if first == None:
-                restore_state(state, foreground_window)
-                last_focus_time = datetime.datetime.now()
+    def focus_handler(self, old, new):
+        if self.is_active:
+            if old == None:
+                self.restore()
                 if not PREVIEW:
-                    # window.showMinimized()
-                    ultra_minimize(window)
+                    minimize(self)
 
-    layout = PyQt5.QtWidgets.QVBoxLayout()
-    if PREVIEW:
-        pic = PyQt5.QtWidgets.QLabel()
-        pic.setPixmap(PyQt5.QtGui.QPixmap.fromImage(ImageQt(screenshot).copy()))
-    name = PyQt5.QtWidgets.QLineEdit()
+    def handle_new_config(self, new_config_name):
+        selected_windows = select_windows()
+        conf = create_saved_config(selected_windows, self.state, self.foreground_window)
+        add_new_config(conf, new_config_name)
+    
+    def handle_restore_config(self, restore_config_name, type_symbol):
+        config = load_config()
+        if config and restore_config_name in config.keys():
+            self.restore_config(config[restore_config_name], type_symbol=='*')
+            self.is_active = True
+            self.focus_handler(None, True)
 
-    # set window icon
-    icon = PyQt5.QtGui.QIcon(icon_path)
+    def on_return_pressed(self):
+        new_config_name = self.name_widget.text()
+        if new_config_name.startswith('++'):
+            new_config_name = new_config_name[2:]
+            self.handle_new_config(new_config_name)
+
+        if new_config_name.startswith('+') or new_config_name.startswith('*'):
+            symb = new_config_name[0]
+            new_config_name = new_config_name[1:]
+            self.handle_restore_config(new_config_name, symb)
+
+        self.is_active = True
+        if len(new_config_name) > 0:
+            self.setWindowTitle(NAME +  ' > ' + new_config_name)
+        else:
+            self.setWindowTitle(NAME)
+        # window.showMinimized()
+        minimize(self)
+
+if __name__ == '__main__':
+
+    app = PyQt5.QtWidgets.QApplication([])
+    icon = PyQt5.QtGui.QIcon(ICON_PATH)
     app.setWindowIcon(icon)
 
-    def on_return_pressed():
-        global active
-        inp = name.text()
-        if inp.startswith('++'):
-            inp = inp[2:]
-            swindows = select_windows()
-            conf = create_saved_config(swindows, state, foreground_window)
-            add_new_config(conf, inp)
-
-        if inp.startswith('+') or inp.startswith('*'):
-            symb = inp[0]
-            inp = inp[1:]
-            config = load_config()
-            if config and inp in config.keys():
-                restore_config(config[inp], symb=='*')
-                active = True
-                on_focus(None, True)
-            # restore inp config
-
-        active = True
-        if len(inp) > 0:
-            window.setWindowTitle(NAME +  ' > ' + inp)
-        else:
-            window.setWindowTitle(NAME)
-        # window.showMinimized()
-        ultra_minimize(window)
+    manager_window = WindowState()
+    manager_window.get_snapshot()
 
     if PREVIEW:
         def on_timout():
-            global active
-            if active:
-                if (datetime.datetime.now() - last_focus_time).seconds > 1:
-                    # win32gui.SetWindowPos(hwnd, win32con.HWND_TOP, rect[0], rect[1], rect[2] - rect[0], rect[3] - rect[1], win32con.SWP_SHOWWINDOW)
-                    # window.showMinimized()
-                    ultra_minimize(window)
+            if manager_window.is_active:
+                minimize(manager_window)
 
         # if we minimize it in focusEvent, then the window is not properly rendered
         # so we try to minimize it periodically here
@@ -304,15 +318,11 @@ if __name__ == '__main__':
         timer.timeout.connect(on_timout)
         timer.start(1000)
 
-    name.returnPressed.connect(on_return_pressed)
-    layout.addWidget(name)
     if PREVIEW:
-        layout.addWidget(pic)
-    window.setLayout(layout)
-    window.setFocusPolicy(PyQt5.QtCore.Qt.StrongFocus)
-    if PREVIEW:
-        window.showMaximized()
+        manager_window.showMaximized()
     else:
-        window.show()
-    app.focusChanged.connect(on_focus)
+        manager_window.show()
+
+    app.focusChanged.connect(manager_window.focus_handler)
     app.exec()
+
