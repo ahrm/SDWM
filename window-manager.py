@@ -21,7 +21,7 @@ WMI = wmi.WMI()
 
 NAME = 'SDWM'
 # if set, we create an image for alt-tab preview, at the cost of some annoyances
-PREVIEW = False
+PREVIEW = True
 CONFIG_FILE_LOCATION = os.path.dirname(os.path.abspath(__file__)) + r"\config.json"
 ICON_PATH = os.path.dirname(os.path.abspath(__file__)) + r'\SDWM-icon.png'
 CONFIG_FILE_VERSION = 1
