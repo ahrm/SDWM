@@ -16,6 +16,7 @@ import json
 import win32process
 import copy
 import subprocess
+import argparse
 
 WMI = wmi.WMI()
 
@@ -300,13 +301,31 @@ class WindowState(QWidget):
         minimize(self)
 
 if __name__ == '__main__':
-
+    parser = argparse.ArgumentParser(description="SDWM - Simple Dynamic Window Manager for Windows")
+    parser.add_argument('--no-preview', action='store_true', help='do not show an alt-tab preview')
+    parser.add_argument('--load-config', help='load CONFIG instead of snapshotting the current layout', metavar='CONFIG')
+    parser.add_argument('--launch', action='store_true', help='if used with --load-config then launch any windows from the config which are not present')
+    
+    args = parser.parse_args()
+    
+    if args.no_preview:
+        PREVIEW = False
+    
     app = PyQt5.QtWidgets.QApplication([])
     icon = PyQt5.QtGui.QIcon(ICON_PATH)
     app.setWindowIcon(icon)
 
     manager_window = WindowState()
-    manager_window.get_snapshot()
+    
+    if args.load_config is None:
+        manager_window.get_snapshot()
+    else:
+        if args.launch:
+            manager_window.name_widget.setText('*' + args.load_config)
+        else:
+            manager_window.name_widget.setText('+' + args.load_config)
+        
+        manager_window.on_return_pressed()
 
     if PREVIEW:
         def on_timout():
